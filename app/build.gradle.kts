@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 if (isFullBuild && System.getenv("PULL_REQUEST") == null) {
@@ -58,7 +59,7 @@ android {
 //            isUniversalApk = false
 //        }
 //    }
-    
+
     signingConfigs {
         getByName("debug") {
             if (System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD") != null) {
@@ -168,4 +169,11 @@ dependencies {
     "fullImplementation"(libs.opencc4j)
 
     implementation(libs.timber)
+
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    implementation("io.ktor:ktor-client-okhttp:2.3.7")
+
 }

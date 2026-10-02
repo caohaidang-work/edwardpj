@@ -132,12 +132,13 @@ import java.io.ObjectOutputStream
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 import java.time.LocalDateTime
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.time.Duration.Companion.seconds
-
+import android.util.Log
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @AndroidEntryPoint
@@ -186,6 +187,13 @@ class MusicService : MediaLibraryService(),
 
     lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
+
+    /**
+     * In-memory stream URL cache. URLs returned by YouTube are temporary,
+     * so every entry carries its own absolute expiration timestamp.
+     */
+    private val streamUrlCache = ConcurrentHashMap<String, ResolvedStream>()
+    private val streamRefreshInProgress = ConcurrentHashMap.newKeySet<String>()
 
     private var isAudioEffectSessionOpened = false
 
@@ -587,15 +595,136 @@ class MusicService : MediaLibraryService(),
         }
     }
 
-    override fun onPlayerError(error: PlaybackException) {
-        if (dataStore.get(AutoSkipNextOnErrorKey, false) &&
+    override fun onPlayerError(
+        error: PlaybackException
+    ) {
+
+        val mediaId =
+            player.currentMediaItem
+                ?.mediaId
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+
+
+        Log.e(
+            "MusicService",
+            "Playback error: " +
+                    error.message +
+                    " code=" +
+                    error.errorCode,
+            error
+        )
+
+
+        // ============================================================
+        // 1. STREAM HTTP ERROR
+        // ============================================================
+
+        if (
+            isLikelyStreamHttpError(error) &&
+            mediaId != null
+        ) {
+
+            streamUrlCache.remove(
+                mediaId
+            )
+
+
+            if (
+                streamRefreshInProgress
+                    .add(mediaId)
+            ) {
+
+                try {
+
+                    player.prepare()
+
+                    player.playWhenReady =
+                        true
+
+                } finally {
+
+                    streamRefreshInProgress
+                        .remove(mediaId)
+                }
+
+                return
+            }
+        }
+
+
+        // ============================================================
+        // 2. NO STREAM
+        //
+        // Force resolver to try again.
+        // ============================================================
+
+        if (
+            error.errorCode ==
+            ERROR_CODE_NO_STREAM &&
+            mediaId != null
+        ) {
+
+            streamUrlCache.remove(
+                mediaId
+            )
+
+
+            if (
+                streamRefreshInProgress
+                    .add(mediaId)
+            ) {
+
+                try {
+
+                    player.prepare()
+
+                    player.playWhenReady =
+                        true
+
+                } finally {
+
+                    streamRefreshInProgress
+                        .remove(mediaId)
+                }
+
+                return
+            }
+        }
+
+
+        // ============================================================
+        // 3. AUTO SKIP
+        // ============================================================
+
+        if (
+            dataStore.get(
+                AutoSkipNextOnErrorKey,
+                false
+            ) &&
             isInternetAvailable(this) &&
             player.hasNextMediaItem()
         ) {
+
             player.seekToNext()
+
             player.prepare()
-            player.playWhenReady = true
+
+            player.playWhenReady =
+                true
         }
+    }
+
+    private fun isLikelyStreamHttpError(error: PlaybackException): Boolean {
+        if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) return true
+        var cause: Throwable? = error.cause
+        repeat(6) {
+            if (cause == null) return@repeat
+            if (cause is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) return true
+            cause = cause?.cause
+        }
+        return false
     }
 
     private fun createCacheDataSource(): CacheDataSource.Factory =
@@ -619,80 +748,277 @@ class MusicService : MediaLibraryService(),
             .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
 
     private fun createDataSourceFactory(): DataSource.Factory {
-        val songUrlCache = HashMap<String, Pair<String, Long>>()
-        return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
-            val mediaId = dataSpec.key ?: error("No media id")
 
-            if (downloadCache.isCached(mediaId, dataSpec.position, if (dataSpec.length >= 0) dataSpec.length else 1) ||
-                playerCache.isCached(mediaId, dataSpec.position, CHUNK_LENGTH)
+        return ResolvingDataSource.Factory(
+            createCacheDataSource()
+        ) { dataSpec ->
+
+            val mediaId =
+                dataSpec.key
+                    ?: error("No media id")
+
+
+            // ============================================================
+            // 1. CHECK LOCAL CACHE
+            // ============================================================
+
+            if (
+                downloadCache.isCached(
+                    mediaId,
+                    dataSpec.position,
+                    if (dataSpec.length >= 0) {
+                        dataSpec.length
+                    } else {
+                        1
+                    }
+                ) ||
+                playerCache.isCached(
+                    mediaId,
+                    dataSpec.position,
+                    CHUNK_LENGTH
+                )
             ) {
-                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
+
                 return@Factory dataSpec
             }
 
-            songUrlCache[mediaId]?.takeIf { it.second < System.currentTimeMillis() }?.let {
-                scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                return@Factory dataSpec.withUri(it.first.toUri())
-            }
 
-            // Check whether format exists so that users from older version can view format details
-            // There may be inconsistent between the downloaded file and the displayed info if user change audio quality frequently
-            val playedFormat = runBlocking(Dispatchers.IO) { database.format(mediaId).first() }
-            val playerResponse = runBlocking(Dispatchers.IO) {
-                YouTube.player(mediaId)
-            }.getOrElse { throwable ->
-                when (throwable) {
-                    is ConnectException, is UnknownHostException -> {
-                        throw PlaybackException(getString(R.string.error_no_internet), throwable, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
-                    }
+            // ============================================================
+            // 2. CHECK STREAM URL CACHE
+            // ============================================================
 
-                    is SocketTimeoutException -> {
-                        throw PlaybackException(getString(R.string.error_timeout), throwable, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT)
-                    }
-
-                    else -> throw PlaybackException(getString(R.string.error_unknown), throwable, PlaybackException.ERROR_CODE_REMOTE_ERROR)
+            streamUrlCache[mediaId]
+                ?.takeIf {
+                    it.isValid()
                 }
-            }
-            if (playerResponse.playabilityStatus.status != "OK") {
-                throw PlaybackException(playerResponse.playabilityStatus.reason, null, PlaybackException.ERROR_CODE_REMOTE_ERROR)
-            }
+                ?.let { cached ->
 
-            val format =
-                if (playedFormat != null) {
-                    playerResponse.streamingData?.adaptiveFormats?.find {
-                        // Use itag to identify previously played format
-                        it.itag == playedFormat.itag
-                    }
-                } else {
-                    playerResponse.streamingData?.adaptiveFormats
-                        ?.filter { it.isAudio }
-                        ?.maxByOrNull {
-                            it.bitrate * when (audioQuality) {
-                                AudioQuality.AUTO -> if (connectivityManager.isActiveNetworkMetered) -1 else 1
-                                AudioQuality.HIGH -> 1
-                                AudioQuality.LOW -> -1
-                            } + (if (it.mimeType.startsWith("audio/webm")) 10240 else 0) // prefer opus stream
-                        }
-                } ?: throw PlaybackException(getString(R.string.error_no_stream), null, ERROR_CODE_NO_STREAM)
+                    return@Factory dataSpec
+                        .withUri(
+                            cached.url.toUri()
+                        )
+                        .subrange(
+                            dataSpec.uriPositionOffset,
+                            CHUNK_LENGTH
+                        )
+                }
 
-            database.query {
-                upsert(
-                    FormatEntity(
-                        id = mediaId,
-                        itag = format.itag,
-                        mimeType = format.mimeType.split(";")[0],
-                        codecs = format.mimeType.split("codecs=")[1].removeSurrounding("\""),
-                        bitrate = format.bitrate,
-                        sampleRate = format.audioSampleRate,
-                        contentLength = format.contentLength!!,
-                        loudnessDb = playerResponse.playerConfig?.audioConfig?.loudnessDb
+
+            // ============================================================
+            // 3. GET STORED FORMAT
+            // ============================================================
+
+            val playedFormat =
+                runBlocking(Dispatchers.IO) {
+
+                    database
+                        .format(mediaId)
+                        .first()
+                }
+
+
+            // ============================================================
+            // 4. RESOLVE STREAM
+            // ============================================================
+
+            val resolved =
+                runBlocking(Dispatchers.IO) {
+
+                    StreamResolver.resolve(
+                        videoId = mediaId,
+                        playedFormat = playedFormat,
+                        audioQuality = audioQuality,
+                        isMetered =
+                            connectivityManager
+                                .isActiveNetworkMetered
                     )
+                }
+
+
+            // ============================================================
+            // 5. NO STREAM
+            // ============================================================
+
+            if (resolved == null) {
+
+                throw PlaybackException(
+                    getString(
+                        R.string.error_no_stream
+                    ),
+                    null,
+                    ERROR_CODE_NO_STREAM
                 )
             }
-            scope.launch(Dispatchers.IO) { recoverSong(mediaId, playerResponse) }
 
-            songUrlCache[mediaId] = format.url!! to playerResponse.streamingData!!.expiresInSeconds * 1000L
-            dataSpec.withUri(format.url!!.toUri()).subrange(dataSpec.uriPositionOffset, CHUNK_LENGTH)
+
+            // ============================================================
+            // 6. CACHE RESOLVED STREAM
+            // ============================================================
+
+            streamUrlCache[
+                mediaId
+            ] = resolved
+
+
+            // ============================================================
+            // 7. UPDATE FORMAT DATABASE
+            //
+            // Only available when the resolver returned
+            // the original InnerTune PlayerResponse.
+            // NewPipe does not provide this object.
+            // ============================================================
+
+            resolved
+                .playerResponse
+                ?.let { playerResponse ->
+
+
+                    val adaptiveFormats =
+                        playerResponse
+                            .streamingData
+                            ?.adaptiveFormats
+
+
+                    val selectedFormat =
+                        if (playedFormat != null) {
+
+                            adaptiveFormats
+                                ?.find {
+
+                                    it.itag ==
+                                            playedFormat.itag &&
+
+                                            it.isAudio &&
+                                            !it.url
+                                                .isNullOrBlank()
+                                }
+
+                        } else {
+
+                            adaptiveFormats
+                                ?.asSequence()
+                                ?.filter {
+
+                                    it.isAudio &&
+                                            !it.url
+                                                .isNullOrBlank()
+                                }
+                                ?.maxByOrNull {
+
+                                    val bitrate =
+                                        it.bitrate.toLong()
+
+                                    val qualityMultiplier =
+                                        when (audioQuality) {
+
+                                            AudioQuality.AUTO ->
+
+                                                if (
+                                                    connectivityManager
+                                                        .isActiveNetworkMetered
+                                                ) {
+                                                    -1L
+                                                } else {
+                                                    1L
+                                                }
+
+                                            AudioQuality.HIGH ->
+                                                1L
+
+                                            AudioQuality.LOW ->
+                                                -1L
+                                        }
+
+
+                                    val webmBonus =
+                                        if (
+                                            it.mimeType
+                                                .startsWith(
+                                                    "audio/webm"
+                                                )
+                                        ) {
+                                            10_240L
+                                        } else {
+                                            0L
+                                        }
+
+
+                                    bitrate *
+                                            qualityMultiplier +
+                                            webmBonus
+                                }
+                        }
+
+
+                    selectedFormat?.let { format ->
+
+                        database.query {
+
+                            upsert(
+                                FormatEntity(
+                                    id = mediaId,
+
+                                    itag = format.itag,
+
+                                    mimeType =
+                                        format.mimeType
+                                            .split(";")
+                                            .first(),
+
+                                    codecs =
+                                        format.mimeType
+                                            .split("codecs=")
+                                            .getOrNull(1)
+                                            ?.removeSurrounding(
+                                                "\""
+                                            )
+                                            ?: "",
+
+                                    bitrate =
+                                        format.bitrate,
+
+                                    sampleRate =
+                                        format.audioSampleRate,
+
+                                    contentLength =
+                                        format.contentLength
+                                            ?: 0L,
+
+                                    loudnessDb =
+                                        playerResponse
+                                            .playerConfig
+                                            ?.audioConfig
+                                            ?.loudnessDb
+                                )
+                            )
+                        }
+                    }
+
+
+                    scope.launch(
+                        Dispatchers.IO
+                    ) {
+
+                        recoverSong(
+                            mediaId,
+                            playerResponse
+                        )
+                    }
+                }
+
+
+            // ============================================================
+            // 8. GIVE EXOPLAYER THE ACTUAL STREAM URL
+            // ============================================================
+
+            return@Factory dataSpec
+                .withUri(
+                    resolved.url.toUri()
+                )
+                .subrange(
+                    dataSpec.uriPositionOffset,
+                    CHUNK_LENGTH
+                )
         }
     }
 
