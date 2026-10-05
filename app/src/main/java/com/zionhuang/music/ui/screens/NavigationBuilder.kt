@@ -19,6 +19,7 @@ import com.zionhuang.music.ui.screens.library.LibraryAlbumsScreen
 import com.zionhuang.music.ui.screens.library.LibraryArtistsScreen
 import com.zionhuang.music.ui.screens.library.LibraryPlaylistsScreen
 import com.zionhuang.music.ui.screens.library.LibrarySongsScreen
+import com.zionhuang.music.ui.screens.library.UnifiedLibraryScreen
 import com.zionhuang.music.ui.screens.playlist.LocalPlaylistScreen
 import com.zionhuang.music.ui.screens.playlist.OnlinePlaylistScreen
 import com.zionhuang.music.ui.screens.search.OnlineSearchResult
@@ -41,6 +42,15 @@ fun NavGraphBuilder.navigationBuilder(
 ) {
     composable(Screens.Home.route) {
         HomeScreen(navController)
+    }
+    composable(Screens.Library.route) {
+        UnifiedLibraryScreen(navController = navController)
+    }
+    composable(Screens.Account.route) {
+        AccountScreen(navController = navController, scrollBehavior = scrollBehavior)
+    }
+    composable(Screens.GoogleLogin.route) {
+        GoogleLoginScreen(navController = navController)
     }
     composable(Screens.Songs.route) {
         LibrarySongsScreen(navController)
@@ -216,8 +226,5 @@ fun NavGraphBuilder.navigationBuilder(
     }
     composable("settings/about") {
         AboutScreen(navController, scrollBehavior)
-    }
-    composable(Screens.GoogleProfile.route) {
-        GoogleLoginScreen(navController = navController)
     }
 }

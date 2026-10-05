@@ -2,22 +2,29 @@ package com.zionhuang.music.ui.screens
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.runtime.Immutable
 import com.zionhuang.music.R
 
-@Immutable
 sealed class Screens(
-    @StringRes val titleId: Int,
-    @DrawableRes val iconId: Int,
     val route: String,
+    @StringRes val titleId: Int = 0,
+    @DrawableRes val iconId: Int = 0
 ) {
-    object Home : Screens(R.string.home, R.drawable.home, "home")
-    object Songs : Screens(R.string.songs, R.drawable.music_note, "songs")
-    object Artists : Screens(R.string.artists, R.drawable.artist, "artists")
-    object Albums : Screens(R.string.albums, R.drawable.album, "albums")
-    object Playlists : Screens(R.string.playlists, R.drawable.queue_music, "playlists")
+    // 3 Tab chính hiển thị trên thanh Bottom Navigation
+    object Home : Screens("home", R.string.home, R.drawable.home)
+    object Library : Screens("library", R.string.library, R.drawable.library_music)
+    object Account : Screens("account", R.string.account, R.drawable.person)
 
-    object GoogleProfile : Screens(R.string.account, R.drawable.person, "google_profile")    companion object {
-        val MainScreens = listOf(Home, Songs, Artists, Albums, Playlists)
+    // Màn hình đăng nhập (không có icon ở Bottom Bar)
+    object GoogleLogin : Screens("google_login")
+
+    // Giữ lại các biến cũ để MainActivity và cấu hình cài đặt không bị lỗi Unresolved Reference
+    object Songs : Screens("songs")
+    object Artists : Screens("artists")
+    object Albums : Screens("albums")
+    object Playlists : Screens("playlists")
+
+    companion object {
+        // Danh sách gộp 3 tab
+        val MainScreens = listOf(Home, Library, Account)
     }
 }

@@ -258,7 +258,7 @@ class MainActivity : ComponentActivity() {
                             val result = imageLoader.execute(
                                 ImageRequest.Builder(this@MainActivity)
                                     .data(song.thumbnailUrl)
-                                    .allowHardware(false) // pixel access is not supported on Config#HARDWARE bitmaps
+                                    .allowHardware(false)
                                     .build()
                             )
                             (result.drawable as? BitmapDrawable)?.bitmap?.extractThemeColor() ?: DefaultThemeColor
@@ -277,6 +277,8 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.surface)
                 ) {
+                    val screenMaxHeight = this.maxHeight
+
                     val focusManager = LocalFocusManager.current
                     val density = LocalDensity.current
                     val windowsInsets = WindowInsets.systemBars
@@ -286,6 +288,7 @@ class MainActivity : ComponentActivity() {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val inSelectMode = navBackStackEntry?.savedStateHandle?.getStateFlow("inSelectMode", false)?.collectAsState()
 
+                    // Sử dụng MainScreens chứa 3 tab chính từ Screens.kt
                     val navigationItems = remember { Screens.MainScreens }
                     val defaultOpenTab = remember {
                         dataStore[DefaultOpenTabKey].toEnum(defaultValue = NavigationTab.HOME)
@@ -298,12 +301,12 @@ class MainActivity : ComponentActivity() {
                             else -> null
                         }
                     }
+
+                    // Danh sách màn hình được quyền hiện BottomBar
                     val topLevelScreens = listOf(
                         Screens.Home.route,
-                        Screens.Songs.route,
-                        Screens.Artists.route,
-                        Screens.Albums.route,
-                        Screens.Playlists.route,
+                        Screens.Library.route,
+                        Screens.Account.route,
                         "settings"
                     )
 
@@ -495,10 +498,7 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             startDestination = when (tabOpenedFromShortcut ?: defaultOpenTab) {
                                 NavigationTab.HOME -> Screens.Home
-                                NavigationTab.SONG -> Screens.Songs
-                                NavigationTab.ARTIST -> Screens.Artists
-                                NavigationTab.ALBUM -> Screens.Albums
-                                NavigationTab.PLAYLIST -> Screens.Playlists
+                                else -> Screens.Library // Gom các cài đặt cũ vào Library
                             }.route,
                             enterTransition = {
                                 if (initialState.destination.route in topLevelScreens && targetState.destination.route in topLevelScreens) {
@@ -715,13 +715,13 @@ class MainActivity : ComponentActivity() {
                                     selected = navBackStackEntry?.destination?.hierarchy?.any { it.route == screen.route } == true,
                                     icon = {
                                         Icon(
-                                            painter = painterResource(screen.iconId),
+                                            painter = painterResource(screen.iconId ?: 0),
                                             contentDescription = null
                                         )
                                     },
                                     label = {
                                         Text(
-                                            text = stringResource(screen.titleId),
+                                            text = stringResource(screen.titleId ?: 0),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )

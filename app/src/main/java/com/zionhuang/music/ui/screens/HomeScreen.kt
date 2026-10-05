@@ -5,7 +5,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -81,7 +79,6 @@ import com.zionhuang.music.ui.component.AlbumGridItem
 import com.zionhuang.music.ui.component.ArtistGridItem
 import com.zionhuang.music.ui.component.HideOnScrollFAB
 import com.zionhuang.music.ui.component.LocalMenuState
-import com.zionhuang.music.ui.component.NavigationTile
 import com.zionhuang.music.ui.component.NavigationTitle
 import com.zionhuang.music.ui.component.SongGridItem
 import com.zionhuang.music.ui.component.SongListItem
@@ -329,43 +326,7 @@ fun HomeScreen(
             state = lazylistState,
             contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
         ) {
-            item {
-                Row(
-                    modifier = Modifier
-                        .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .fillMaxWidth()
-                        .animateItem()
-                ) {
-                    NavigationTile(
-                        title = stringResource(R.string.history),
-                        icon = R.drawable.history,
-                        onClick = { navController.navigate("history") },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    NavigationTile(
-                        title = stringResource(R.string.stats),
-                        icon = R.drawable.trending_up,
-                        onClick = { navController.navigate("stats") },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    // Nút hiển thị Account hoặc Login tùy thuộc vào trạng thái
-                    NavigationTile(
-                        title = if (isLoggedIn) stringResource(R.string.account) else "Đăng nhập",
-                        icon = R.drawable.person,
-                        onClick = {
-                            if (isLoggedIn) {
-                                navController.navigate("account")
-                            } else {
-                                navController.navigate(Screens.GoogleProfile.route)
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            // ĐÃ XÓA KHỐI ROW CHỨA CÁC NÚT ĐIỀU HƯỚNG TẠI ĐÂY
 
             quickPicks?.takeIf { it.isNotEmpty() }?.let { quickPicks ->
                 item {
@@ -392,7 +353,6 @@ fun HomeScreen(
                             items = quickPicks,
                             key = { it.id }
                         ) { originalSong ->
-                            // fetch song from database to keep updated
                             val song by database.song(originalSong.id).collectAsState(initial = originalSong)
 
                             SongListItem(
@@ -436,7 +396,6 @@ fun HomeScreen(
                 }
 
                 item {
-                    // take min in case list size is less than 4
                     val rows = min(4, forgottenFavorites.size)
                     LazyHorizontalGrid(
                         state = forgottenFavoritesLazyGridState,
@@ -672,40 +631,6 @@ fun HomeScreen(
                 }
             }
 
-            explorePage?.moodAndGenres?.let { moodAndGenres ->
-                item {
-                    NavigationTitle(
-                        title = stringResource(R.string.mood_and_genres),
-                        onClick = {
-                            navController.navigate("mood_and_genres")
-                        },
-                        modifier = Modifier.animateItem()
-                    )
-                }
-
-                item {
-                    LazyHorizontalGrid(
-                        rows = GridCells.Fixed(4),
-                        contentPadding = PaddingValues(6.dp),
-                        modifier = Modifier
-                            .height((MoodAndGenresButtonHeight + 12.dp) * 4 + 12.dp)
-                            .animateItem()
-                    ) {
-                        items(moodAndGenres) {
-                            MoodAndGenresButton(
-                                title = it.title,
-                                onClick = {
-                                    navController.navigate("youtube_browse/${it.endpoint.browseId}?params=${it.endpoint.params}")
-                                },
-                                modifier = Modifier
-                                    .padding(6.dp)
-                                    .width(180.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
             if (isLoading) {
                 item {
                     ShimmerHost(
@@ -749,7 +674,6 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        // not possible, already filtered out
                         is Artist -> {}
                         is Playlist -> {}
                     }
@@ -760,7 +684,6 @@ fun HomeScreen(
                         is ArtistItem -> luckyItem.radioEndpoint?.let {
                             playerConnection.playQueue(YouTubeQueue(it))
                         }
-
                         is PlaylistItem -> luckyItem.playEndpoint?.let {
                             playerConnection.playQueue(YouTubeQueue(it))
                         }
