@@ -351,16 +351,19 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f)
                     )
 
-                    if (isLoggedIn) {
-                        NavigationTile(
-                            title = stringResource(R.string.account),
-                            icon = R.drawable.person,
-                            onClick = {
+                    // Nút hiển thị Account hoặc Login tùy thuộc vào trạng thái
+                    NavigationTile(
+                        title = if (isLoggedIn) stringResource(R.string.account) else "Đăng nhập",
+                        icon = R.drawable.person,
+                        onClick = {
+                            if (isLoggedIn) {
                                 navController.navigate("account")
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                            } else {
+                                navController.navigate(Screens.GoogleProfile.route)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 

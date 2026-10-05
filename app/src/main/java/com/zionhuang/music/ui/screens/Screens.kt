@@ -17,7 +17,7 @@ sealed class Screens(
     object Albums : Screens(R.string.albums, R.drawable.album, "albums")
     object Playlists : Screens(R.string.playlists, R.drawable.queue_music, "playlists")
 
-    companion object {
+    object GoogleProfile : Screens(R.string.account, R.drawable.person, "google_profile")    companion object {
         val MainScreens = listOf(Home, Songs, Artists, Albums, Playlists)
     }
 }

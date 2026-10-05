@@ -11,8 +11,10 @@ room = "2.6.1"
 hilt = "2.51.1"
 ktor = "2.3.12"
 ksp = "2.0.10-1.0.24"
+playServicesAuth = "21.0.0"
 
 [libraries]
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 annotation = { module = "androidx.annotation:annotation", version.ref = "annotation" }
 guava = { group = "com.google.guava", name = "guava", version = "33.0.0-android" }
 coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version = "1.7.3" }

@@ -217,7 +217,7 @@ fun NavGraphBuilder.navigationBuilder(
     composable("settings/about") {
         AboutScreen(navController, scrollBehavior)
     }
-    composable("login") {
-        LoginScreen(navController)
+    composable(Screens.GoogleProfile.route) {
+        GoogleLoginScreen(navController = navController)
     }
 }

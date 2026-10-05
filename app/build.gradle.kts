@@ -176,4 +176,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
     implementation("io.ktor:ktor-client-okhttp:2.3.7")
 
+    implementation(libs.play.services.auth)
 }

@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.collections.set
-
+import android.util.Log
 @HiltViewModel
 class OnlineSearchViewModel @Inject constructor(
     @ApplicationContext context: Context,
@@ -43,6 +43,12 @@ class OnlineSearchViewModel @Inject constructor(
                                 summaryPage = it.filterExplicit(context.dataStore.get(HideExplicitKey, false))
                             }
                             .onFailure {
+                                Log.e(
+                                    "OnlineSearchViewModel",
+                                    "searchSummary() failed for query=$query",
+                                    it
+                                )
+
                                 reportException(it)
                             }
                     }

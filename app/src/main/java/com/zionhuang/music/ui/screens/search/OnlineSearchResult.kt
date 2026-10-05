@@ -60,6 +60,7 @@ import com.zionhuang.music.ui.menu.YouTubePlaylistMenu
 import com.zionhuang.music.ui.menu.YouTubeSongMenu
 import com.zionhuang.music.viewmodels.OnlineSearchViewModel
 import kotlinx.coroutines.launch
+import android.util.Log
 
 @Composable
 fun OnlineSearchResult(
@@ -215,7 +216,10 @@ fun OnlineSearchResult(
             }
         }
 
-        if (searchFilter == null && searchSummary == null || searchFilter != null && itemsPage == null) {
+        if (
+            (searchFilter == null && searchSummary == null) ||
+            (searchFilter != null && itemsPage == null)
+        ) {
             item {
                 ShimmerHost {
                     repeat(8) {
